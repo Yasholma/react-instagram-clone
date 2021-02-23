@@ -24,7 +24,7 @@ function Login() {
   });
   const [error, setError] = useState<string>("");
   const { email, password } = loginForm;
-  const isValid: boolean = email !== "" && password !== "";
+  const isValid: boolean = email.trim() !== "" && password.trim() !== "";
 
   const handleOnChange = (e: OnChangeEventType) => {
     const { name, value } = e.currentTarget;
@@ -36,6 +36,7 @@ function Login() {
 
     try {
       await firebase.auth().signInWithEmailAndPassword(email, password);
+      setLoginForm({ email: "", password: "" });
       history.push(ROUTES.DASHBOARD);
     } catch (error) {
       setLoginForm({ email: "", password: "" });

@@ -1,25 +1,36 @@
-import { Link } from "react-router-dom";
+import { Link, useHistory } from "react-router-dom";
 import logo from "../images/logo.png";
 import * as ROUTES from "../constants/routes";
 import useTitle from "../hooks/useTitle";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import {
   IRegisterForm,
   OnChangeEventType,
   OnSubmitEventType,
 } from "../interfaces";
+import FirebaseContext from "../context/firebase";
+import doesUsernameExist from "../services/firebase";
 
 function Register() {
   useTitle("Register");
+  const { firebase } = useContext(FirebaseContext);
+  const history = useHistory();
+
   const [registerForm, setRegisterForm] = useState<IRegisterForm>({
     username: "",
     fullname: "",
     email: "",
     password: "",
   });
-  const { username, fullname, email, password } = registerForm;
+  const [error, setError] = useState<string>("");
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  let { username, fullname, email, password } = registerForm;
   const isValid =
-    username !== "" && fullname !== "" && email !== "" && password !== "";
+    username.trim() !== "" &&
+    fullname.trim() !== "" &&
+    email.trim() !== "" &&
+    password.trim() !== "" &&
+    password.trim().length >= 6;
 
   const handleOnChange = (e: OnChangeEventType) => {
     const { name, value } = e.currentTarget;
@@ -28,6 +39,44 @@ function Register() {
 
   const handleRegister = async (e: OnSubmitEventType) => {
     e.preventDefault();
+
+    username = username.toLowerCase();
+    email = email.toLowerCase();
+    setError("");
+    setIsProcessing(true);
+
+    const usernameExist = await doesUsernameExist(username);
+
+    if (usernameExist.length) {
+      setIsProcessing(false);
+      setError("Username already exist.");
+      setRegisterForm({ ...registerForm, username: "" });
+      return;
+    }
+
+    try {
+      const userCredentials = await firebase
+        .auth()
+        .createUserWithEmailAndPassword(email, password);
+      await userCredentials.user?.updateProfile({ displayName: username });
+      await firebase.firestore().collection("users").add({
+        userId: userCredentials.user?.uid,
+        username,
+        fullname,
+        email,
+        following: [],
+        followers: [],
+        dateCreated: Date.now(),
+      });
+
+      setIsProcessing(false);
+      setRegisterForm({ username: "", fullname: "", email: "", password: "" });
+      history.push(ROUTES.DASHBOARD);
+    } catch (error) {
+      setIsProcessing(false);
+      setRegisterForm({ username: "", fullname: "", email: "", password: "" });
+      setError(error.message);
+    }
   };
 
   return (
@@ -37,6 +86,8 @@ function Register() {
           <h1 className="flex justify-center w-full">
             <img src={logo} alt="Instagram" className="mt-2 w-6/12 mb-4" />
           </h1>
+
+          {error && <p className="text-xs w-full text-red-500 mb-4">{error}</p>}
 
           <form method="POST" onSubmit={handleRegister}>
             <input
@@ -81,12 +132,12 @@ function Register() {
 
             <button
               type="submit"
-              disabled={!isValid}
+              disabled={!isValid || isProcessing}
               className={`bg-blue-500 text-white w-full rounded h-8 font-bold ${
-                !isValid && "opacity-50 cursor-not-allowed"
+                (!isValid || isProcessing) && "opacity-50 cursor-not-allowed"
               }`}
             >
-              Register
+              {isProcessing ? "Processing..." : "Register"}
             </button>
           </form>
         </div>
